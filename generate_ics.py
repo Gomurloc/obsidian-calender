@@ -11,7 +11,7 @@
 import hashlib
 import re
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 sys.stdout.reconfigure(encoding="utf-8")  # 콘솔에 한글/특수문자 출력
@@ -82,18 +82,20 @@ def collect_events():
             uid = hashlib.sha1(
                 (str(md.relative_to(VAULT)) + "|" + title).encode("utf-8")
             ).hexdigest()[:16] + "@obsidian"
-            events.append((date_s, hh, mm, title, uid))
+            # DTSTAMP = 원본 파일 수정시각(UTC). 할 일이 안 바뀌면 .ics도 그대로.
+            stamp = datetime.fromtimestamp(
+                md.stat().st_mtime, timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+            events.append((date_s, hh, mm, title, uid, stamp))
     return events
 
 
 def build_ics(events) -> str:
-    stamp = datetime.now().strftime("%Y%m%dT%H%M%S")
     out = [
         "BEGIN:VCALENDAR", "VERSION:2.0",
         "PRODID:-//obsidian-calendar//KR", "CALSCALE:GREGORIAN",
         "METHOD:PUBLISH", f"X-WR-CALNAME:{CAL_NAME}",
     ]
-    for date_s, hh, mm, title, uid in events:
+    for date_s, hh, mm, title, uid, stamp in events:
         ymd = date_s.replace("-", "")
         out += ["BEGIN:VEVENT", f"UID:{uid}", f"DTSTAMP:{stamp}"]
         if hh is not None:
@@ -112,7 +114,7 @@ def main():
     events = collect_events()
     OUTPUT.write_text(build_ics(events), encoding="utf-8", newline="")
     print(f"할 일 {len(events)}건 -> {OUTPUT}")
-    for date_s, hh, mm, title, _ in sorted(events):
+    for date_s, hh, mm, title, *_ in sorted(events):
         t = f" {hh}:{mm}" if hh else ""
         print(f"  {date_s}{t}  {title}")
 
